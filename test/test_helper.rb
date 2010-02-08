@@ -1,33 +1,17 @@
 # encoding: utf-8
 require 'rubygems'
 
-begin
-  require 'test/unit'
-rescue
-  gem 'test-unit', '1.2.3'
-  require 'test/unit'
-end
+gem 'test-unit', '1.2.3'
+require 'test/unit'
 
-begin
-  require 'active_support'
-rescue
-  gem 'activesupport'
-  require 'active_support'
-end
+gem 'activesupport', '<= 2.3.5'
+require 'active_support'
 
-begin
-  require 'action_controller'
-rescue
-  gem 'actionpack'
-  require 'action_controller'
-end
+gem 'actionpack', '<= 2.3.5'
+require 'action_controller'
 
-begin
-  require 'action_view'
-rescue
-  gem 'actionpack'
-  require 'action_view'
-end
+gem 'actionpack', '<= 2.3.5'
+require 'action_view'
 
 require 'active_support/test_case'
 

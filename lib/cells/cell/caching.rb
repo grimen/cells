@@ -15,10 +15,9 @@ module Cells
 
       def self.included(base) #:nodoc:
         base.class_eval do
-          # mixin ::Cell::Base#cache, setup vars and extend #render_state if caching's on.
           extend ClassMethods
 
-          return unless cache_configured?
+          return unless self.cache_configured?
 
           alias_method_chain :render_state, :caching
         end
@@ -36,14 +35,17 @@ module Cells
         # Useful for simply setting a TTL for a cached state.
         # Note that you may omit the <tt>version_proc</tt>.
         #
-        #
         # Example:
+        #
         #   class CachingCell < ::Cell::Base
         #     cache :versioned_cached_state, Proc.new{ {:version => 0} }
-        # would result in the complete cache key
+        #   end
+        #
+        # ...would result in the complete cache key:
+        #
         #   cells/CachingCell/versioned_cached_state/version=0
         #
-        # If you provide a symbol, you can access the cell instance directly in the versioning
+        # If you provide a symbol; you can access the cell instance directly in the versioning
         # method:
         #
         #   class CachingCell < ::Cell::Base
@@ -54,30 +56,38 @@ module Cells
         #         :item_id  => params[:item] }
         #       }
         #     end
-        # results in a very specific cache key, for customized caching:
-        #   cells/CachingCell/cached_state/user=18/item_id=1
+        #
+        # ...results in a very specific cache key, for customized caching:
+        #
+        #   cells/CachingCell/cached_state/user=18/item_id=
         #
         # You may also set a TTL only, e.g. when using the memcached store:
         #
-        #  cache :cached_state, :expires_in => 3.minutes
+        #   cache :cached_state, :expires_in => 3.minutes
         #
-        # Or use both, having a versioning proc <em>and</em> a TTL expiring the state as a fallback
-        # after a certain amount of time.
+        # ...or use both, having a versioning proc <em>and</em> a TTL expiring the state as a fallback
+        # after a certain amount of time:
         #
-        #  cache :cached_state, Proc.new { {:version => 0} }, :expires_in => 10.minutes
-        #--
-        ### TODO: implement for string, nil.
-        ### DISCUSS: introduce return method #sweep ? so the Proc can explicitly
-        ###   delegate re-rendering to the outside.
-        #--
-        def cache(state, version_proc=nil, cache_opts={})
+        #   cache :cached_state, Proc.new { {:version => 0} }, :expires_in => 10.minutes
+        #
+        # == TODO:
+        #
+        #   * implement for string, nil.
+        #   * introduce return method #sweep ? so the Proc can explicitly delegate re-rendering to the outside.
+        #
+        def cache(state, version_proc = nil, cache_options = {})
           if version_proc.is_a?(Hash)
-            cache_opts    = version_proc
+            cache_options = version_proc
             version_proc  = nil
           end
 
-          version_procs[state]  = version_proc
-          cache_options[state]  = cache_opts
+          self.version_procs[state] = version_proc
+          self.cache_options[state] = cache_options
+        end
+
+        # Get cache store to be used for cells.
+        def cache_store #:nodoc:
+          ::ActionController::Base.cache_store
         end
 
         def version_procs
@@ -88,72 +98,65 @@ module Cells
           @cache_options ||= {}
         end
 
-        def cache_store #:nodoc:
-          ::ActionController::Base.cache_store
-        end
-
         def cache_key_for(cell_class, state, args = {}) #:nodoc:
           key_pieces = [cell_class, state]
 
-          args.collect{|a,b| [a.to_s, b]}.sort.each{ |k,v| key_pieces << "#{k}=#{v}" }
+          args.collect { |a,b| [a.to_s, b] }.sort.each { |k,v| key_pieces << "#{k}=#{v}" }
           key = key_pieces.join('/')
 
           ::ActiveSupport::Cache.expand_cache_key(key, :cells)
         end
 
-        def expire_cache_key(key, opts=nil)
-          cache_store.delete(key, opts)
+        def expire_cache_key(key, options = nil)
+          self.cache_store.delete(key, options)
         end
       end
 
+      # Render cell with caching: Read cached cell fragment, or re-render and cache this.
+      # TODO: Discuss sweep (see source header).
       def render_state_with_caching(state)
-        return render_state_without_caching(state) unless state_cached?(state)
+        return self.render_state_without_caching(state) unless self.state_cached?(state)
 
-        key = cache_key(state, call_version_proc_for_state(state))
-        ### DISCUSS: see sweep discussion at #cache.
-
-        # cache hit:
-        if content = read_fragment(key)
-          return content
-        end
-        # re-render:
-        return write_fragment(key, render_state_without_caching(state), cache_options[state])
+        key = cache_key(state, self.call_version_proc_for_state(state))
+        self.read_fragment(key) || self.write_fragment(key, self.render_state_without_caching(state), self.cache_options[state])
       end
 
+      # Read cell cache fragment.
       def read_fragment(key, cache_options = nil) #:nodoc:
-        returning self.class.cache_store.read(key, cache_options) do |content|
-          log "Cell Cache hit: #{key}" unless content.blank?
-        end
+        content = self.class.cache_store.read(key, cache_options)
+        self.log "Cell Cache hit: #{key}" if content.present?
+        content
       end
 
-      def write_fragment(key, content, cache_opts = nil) #:nodoc:
-        log "Cell Cache miss: #{key}"
-        self.class.cache_store.write(key, content, cache_opts)
+      # Write cell cache fragment.
+      def write_fragment(key, content, cache_options = nil) #:nodoc:
+        self.class.cache_store.write(key, content, cache_options)
+        self.log "Cell Cache miss: #{key}"
         content
       end
 
       # Call the versioning Proc for the respective state.
       def call_version_proc_for_state(state)
-        version_proc = version_procs[state]
-
-        return {} unless version_proc # call to #cache was without any args.
-
-        return version_proc.call(self) if version_proc.kind_of?(Proc)
-        send(version_proc)
+        return {} unless version_proc = self.version_procs[state] # nil => call to #cache was without any args.
+        version_proc.kind_of?(Proc) ? version_proc.call(self) : self.send(version_proc)
       end
 
+      # Get cache key for cell state.
       def cache_key(state, args = {}) #:nodoc:
         self.class.cache_key_for(self.cell_name, state, args)
       end
 
+      # Checks if specified cell state is in cache.
       def state_cached?(state)
         self.class.version_procs.has_key?(state)
       end
 
+      # Version procs for this cell class.
       def version_procs
         self.class.version_procs
       end
 
+      # Cache options for this cell class.
       def cache_options
         self.class.cache_options
       end
