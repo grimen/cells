@@ -110,15 +110,15 @@ class CellsTest < ActionController::TestCase
     super
     MyTestCell.default_template_format = :html
   end
-  
+
   def test_class_aliasing
     assert_equal Cell::Base, Cells::Cell::Base
   end
-  
+
   def test_view_paths
     assert_kind_of ActionView::PathSet, Cell::Base.view_paths, "must be a PathSet for proper template caching/reloading (see issue#2)"
   end
-  
+
   def test_cells_view_paths=
     swap( Cell::Base, :view_paths => ['you', 'are', 'here'])  do
       paths = Cell::Base.view_paths
@@ -127,8 +127,7 @@ class CellsTest < ActionController::TestCase
       assert_equal %w(you are here), Cell::Base.view_paths
     end
   end
-  
-  
+
   def test_controller_render_methods
     get :call_render_cell_with_strings  # render_cell("test", "state")
     assert_response :success
@@ -329,7 +328,7 @@ class CellsTest < ActionController::TestCase
 
     assert_equal 'value', c
   end
-  
+
   def test_log
     assert_nothing_raised do
       TestCell.new(@controller).log("everything is perfect!")

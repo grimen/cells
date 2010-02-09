@@ -177,7 +177,7 @@ module Cells
 
         # Creates a cell instance of the class <tt>name</tt>Cell, passing through
         # <tt>options</tt>.
-        def create_cell_for(controller, name, options={})
+        def create_cell_for(controller, name, options = {})
           self.class_from_cell_name(name).new(controller, options)
         end
 
@@ -256,11 +256,12 @@ module Cells
       delegate :params, :session, :request, :logger, :to => :controller
 
       attr_accessor :controller
-      attr_reader   :state_name
+      attr_reader   :state_name, :opts
+      alias :options :opts
 
       def initialize(controller, options = {})
         @controller = controller
-        @opts = options
+        @options = @opts = options
       end
 
       def cell_name
@@ -272,8 +273,8 @@ module Cells
       def render_state(state)
         @cell = self
         @state_name = state
-        content = dispatch_state(state)
-        content.is_a?(String) ? content : render_view_for_backward_compat(content, state)
+        content = self.dispatch_state(state)
+        content.is_a?(String) ? content : self.render_view_for_backward_compat(content, state)
       end
 
       # Call the state method.
@@ -346,6 +347,7 @@ module Cells
       # Render the view belonging to the given state. Will raise ActionView::MissingTemplate
       # if it can not find one of the requested view template. Note that this behaviour was
       # introduced in cells 2.3 and replaces the former warning message.
+      # FIXME: options should be last argument - convention and also makes so much more sense.
       def render_view_for(options, state)
         return '' if options[:nothing]
         action_view = self.setup_action_view
