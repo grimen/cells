@@ -102,7 +102,7 @@ module Cells
           key_pieces = [cell_class, state]
 
           args.collect { |a,b| [a.to_s, b] }.sort.each { |k,v| key_pieces << "#{k}=#{v}" }
-          key = key_pieces.join('/')
+          key = key_pieces.join(File::SEPARATOR)
 
           ::ActiveSupport::Cache.expand_cache_key(key, :cells)
         end

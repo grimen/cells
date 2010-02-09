@@ -10,34 +10,26 @@ module Cells
       # Tries to find the passed template in view_paths. Returns the view on success-
       # otherwise it will throw an ActionView::MissingTemplate exception.
       def try_picking_template_for_path(template_path)
-        self.view_paths.find_template(template_path, template_format)
+        self.view_paths.find_template(template_path, self.template_format)
       end
 
+      # Render cell view.
       ### TODO: this should just be a thin helper.
-      ### dear rails folks, could you guys please provide a helper #render and an internal #render_for
-      ### so that we can overwrite the helper and cleanly reuse the internal method? using the same
-      ### method both internally and externally sucks ass.
+      ### TODO: delegate dynamically:
+      ### TODO: we have to find out if this is a call to the cells #render method, or to the rails
+      ###       method (e.g. when rendering a layout).
       def render(options = {}, local_assigns = {}, &block)
-        ### TODO: delegate dynamically:
-        ### TODO: we have to find out if this is a call to the cells #render method, or to the rails
-        ###       method (e.g. when rendering a layout). what a shit.
-        if view = options[:view]
-          return cell.render_view_for(options, view)
+        if options[:view]
+          self.cell.render_view_for(options, options[:view])
+        else
+          # rails compatibility we should get rid of: adds the cell name to the partial name.
+          options[:partial] = self.expand_view_path(options[:partial]) if options[:partial]
+          super(options, local_assigns, &block)
         end
-
-        # rails compatibility we should get rid of:
-        if partial_path = options[:partial]
-          # adds the cell name to the partial name.
-          options[:partial] = expand_view_path(partial_path)
-        end
-        #throw Exception.new
-
-        super(options, local_assigns, &block)
       end
 
       def expand_view_path(path)
-        path = "#{cell.cell_name}/#{path}" unless path.include?('/')
-        path
+        (path && path.include?(File::SEPARATOR)) ? path : File.join("#{cell.cell_name}", "#{path}")
       end
 
       # this prevents cell ivars from being overwritten by same-named
@@ -47,10 +39,11 @@ module Cells
         if @controller
           variables = @controller.instance_variable_names
           variables -= @controller.protected_instance_variables if @controller.respond_to?(:protected_instance_variables)
-          variables -= assigns.keys.collect { |key| "@#{key}" } # cell ivars override controller ivars.
-          variables.each { |name| instance_variable_set(name, @controller.instance_variable_get(name)) }
+          variables -= self.assigns.keys.collect { |key| "@#{key}" } # cell ivars override controller ivars.
+          variables.each { |name| self.instance_variable_set(name, @controller.instance_variable_get(name)) }
         end
       end
+
     end
   end
 end
